@@ -11,23 +11,25 @@ T min<T extends Comparable<T>>(T a, T b) => a.compareTo(b) < 0 ? a : b;
 class Graph {
   final List<GraphNode> nodes;
   final List<GraphEdge> edges;
+  final bool isDirected;
 
-  Graph({
-    required this.nodes,
-    required this.edges,
-  });
+  Graph({required this.nodes, required this.edges, this.isDirected = false});
 
   /// ایجاد گراف تصادفی
   factory Graph.random({
     required int nodeCount,
     required Size canvasSize,
     double edgeProbability = 0.3, // احتمال اتصال بین دو نود
+    bool isDirected = false,
   }) {
     final random = Random();
     final nodes = <GraphNode>[];
 
     // محاسبه فاصله مناسب بین نودها
-    final minDistance = max(80.0, min(canvasSize.width, canvasSize.height) / (nodeCount * 0.5));
+    final minDistance = max(
+      80.0,
+      min(canvasSize.width, canvasSize.height) / (nodeCount * 0.5),
+    );
 
     // ایجاد نودها با فاصله مناسب از هم
     for (int i = 0; i < nodeCount; i++) {
@@ -55,40 +57,39 @@ class Graph {
         }
       } while (true);
 
-      nodes.add(GraphNode(
-        id: i.toString(),
-        position: position,
-      ));
+      nodes.add(GraphNode(id: i.toString(), position: position));
     }
 
     final edges = <GraphEdge>[];
 
     // ایجاد یال‌های تصادفی
     for (int i = 0; i < nodes.length; i++) {
-      for (int j = i + 1; j < nodes.length; j++) {
+      for (int j = 0; j < nodes.length; j++) {
+        if (i == j) continue;
+
+        // در گراف غیر جهت‌دار، فقط یک بار برای هر جفت بررسی می‌کنیم (مثلا i < j)
+        if (!isDirected && i > j) continue;
+
         // با احتمال مشخص یال ایجاد می‌کنیم
         if (random.nextDouble() < edgeProbability) {
           final cost = (random.nextDouble() * 9 + 1); // هزینه بین 1 تا 10
 
-          // یال دو طرفه (undirected graph)
-          edges.add(GraphEdge(
-            from: nodes[i],
-            to: nodes[j],
-            cost: cost,
-          ));
-          edges.add(GraphEdge(
-            from: nodes[j],
-            to: nodes[i],
-            cost: cost,
-          ));
+          if (isDirected) {
+            // یال یک طرفه
+            edges.add(GraphEdge(from: nodes[i], to: nodes[j], cost: cost));
+          } else {
+            // یال دو طرفه (undirected graph)
+            edges.add(GraphEdge(from: nodes[i], to: nodes[j], cost: cost));
+            edges.add(GraphEdge(from: nodes[j], to: nodes[i], cost: cost));
+          }
         }
       }
     }
 
     // اطمینان از اینکه گراف connected است
-    _ensureConnectivity(nodes, edges, random);
+    _ensureConnectivity(nodes, edges, random, isDirected);
 
-    return Graph(nodes: nodes, edges: edges);
+    return Graph(nodes: nodes, edges: edges, isDirected: isDirected);
   }
 
   /// اطمینان از اتصال گراف (هر نود حداقل یک یال داشته باشد)
@@ -96,6 +97,7 @@ class Graph {
     List<GraphNode> nodes,
     List<GraphEdge> edges,
     Random random,
+    bool isDirected,
   ) {
     for (var node in nodes) {
       bool hasEdge = edges.any((e) => e.from == node || e.to == node);
@@ -103,8 +105,18 @@ class Graph {
         // اگر نود یالی نداره، یکی بهش وصل می‌کنیم
         var otherNode = nodes.firstWhere((n) => n != node);
         final cost = (random.nextDouble() * 9 + 1);
-        edges.add(GraphEdge(from: node, to: otherNode, cost: cost));
-        edges.add(GraphEdge(from: otherNode, to: node, cost: cost));
+
+        if (isDirected) {
+          // در گراف جهت‌دار، حداقل یک یال خروجی یا ورودی می‌دهیم
+          if (random.nextBool()) {
+            edges.add(GraphEdge(from: node, to: otherNode, cost: cost));
+          } else {
+            edges.add(GraphEdge(from: otherNode, to: node, cost: cost));
+          }
+        } else {
+          edges.add(GraphEdge(from: node, to: otherNode, cost: cost));
+          edges.add(GraphEdge(from: otherNode, to: node, cost: cost));
+        }
       }
     }
   }

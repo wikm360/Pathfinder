@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/graph.dart';
 import '../models/node.dart';
@@ -39,23 +40,36 @@ class GraphPainter extends CustomPainter {
   /// رسم یال‌ها
   void _drawEdges(Canvas canvas) {
     final edgePaint = Paint()
-      ..color = Colors.grey.withValues(alpha: 0.4)
-      ..strokeWidth = 2
+      ..color = Colors.white.withOpacity(0.15)
+      ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
     final costPaint = Paint()
-      ..color = Colors.white
+      ..color = const Color(0xFF151628)
       ..style = PaintingStyle.fill;
+
+    final costBorderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
 
     final Set<String> drawnEdges = {};
 
     for (var edge in graph.edges) {
-      // برای جلوگیری از رسم دوباره یال‌های دوطرفه
-      final edgeKey = _getEdgeKey(edge.from, edge.to);
-      if (drawnEdges.contains(edgeKey)) continue;
-      drawnEdges.add(edgeKey);
+      // در گراف غیر جهت‌دار، از رسم دوباره یال‌های برگشتی جلوگیری می‌کنیم
+      if (!graph.isDirected) {
+        final edgeKey = _getEdgeKey(edge.from, edge.to);
+        if (drawnEdges.contains(edgeKey)) continue;
+        drawnEdges.add(edgeKey);
+      }
 
+      // رسم خط یال
       canvas.drawLine(edge.from.position, edge.to.position, edgePaint);
+
+      // اگر گراف جهت‌دار است، فلش رسم می‌کنیم
+      if (graph.isDirected) {
+        _drawArrow(canvas, edge.from.position, edge.to.position, edgePaint);
+      }
 
       // رسم هزینه یال در وسط
       final midPoint = Offset(
@@ -63,15 +77,16 @@ class GraphPainter extends CustomPainter {
         (edge.from.position.dy + edge.to.position.dy) / 2,
       );
 
-      // پس‌زمینه سفید برای خوانایی بهتر
-      canvas.drawCircle(midPoint, 12, costPaint);
+      // پس‌زمینه تیره برای خوانایی بهتر
+      canvas.drawCircle(midPoint, 10, costPaint);
+      canvas.drawCircle(midPoint, 10, costBorderPaint);
 
       // متن هزینه
       final textSpan = TextSpan(
         text: edge.cost.toStringAsFixed(1),
         style: TextStyle(
-          color: Colors.grey[700],
-          fontSize: 10,
+          color: Colors.white.withOpacity(0.9),
+          fontSize: 9,
           fontWeight: FontWeight.bold,
         ),
       );
@@ -87,14 +102,51 @@ class GraphPainter extends CustomPainter {
     }
   }
 
+  /// رسم فلش برای یال‌های جهت‌دار
+  void _drawArrow(Canvas canvas, Offset from, Offset to, Paint paint) {
+    const double arrowSize = 10.0;
+    const double nodeRadius = 20.0; // شعاع تقریبی نود
+
+    final double angle = atan2(to.dy - from.dy, to.dx - from.dx);
+
+    // محاسبه نقطه پایان فلش (روی محیط دایره نود مقصد)
+    final endPoint = Offset(
+      to.dx - nodeRadius * cos(angle),
+      to.dy - nodeRadius * sin(angle),
+    );
+
+    final path = Path();
+    path.moveTo(endPoint.dx, endPoint.dy);
+    path.lineTo(
+      endPoint.dx - arrowSize * cos(angle - pi / 6),
+      endPoint.dy - arrowSize * sin(angle - pi / 6),
+    );
+    path.lineTo(
+      endPoint.dx - arrowSize * cos(angle + pi / 6),
+      endPoint.dy - arrowSize * sin(angle + pi / 6),
+    );
+    path.close();
+
+    canvas.drawPath(path, paint..style = PaintingStyle.fill);
+  }
+
   /// رسم مسیر نهایی
   void _drawPath(Canvas canvas) {
+    // رسم هاله درخشان زیر مسیر
+    final glowPaint = Paint()
+      ..color = const Color(0xFF7000FF).withOpacity(0.5)
+      ..strokeWidth = 12
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+      ..style = PaintingStyle.stroke;
+
     final pathPaint = Paint()
-      ..color = Colors.green
+      ..color =
+          const Color(0xFF7000FF) // Neon Purple
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke;
 
     for (int i = 0; i < path.length - 1; i++) {
+      canvas.drawLine(path[i].position, path[i + 1].position, glowPaint);
       canvas.drawLine(path[i].position, path[i + 1].position, pathPaint);
     }
   }
@@ -102,26 +154,49 @@ class GraphPainter extends CustomPainter {
   /// رسم نودها
   void _drawNodes(Canvas canvas) {
     for (var node in graph.nodes) {
-      Color nodeColor = Colors.blue[300]!;
-      double nodeSize = 20;
+      Color nodeColor = const Color(
+        0xFF00F0FF,
+      ).withOpacity(0.3); // Default Cyan
+      Color borderColor = const Color(0xFF00F0FF);
+      double nodeSize = 18;
+      bool hasGlow = false;
 
       // رنگ‌بندی بر اساس وضعیت نود
       if (node == selectedStart) {
-        nodeColor = Colors.green;
-        nodeSize = 25;
-      } else if (node == selectedGoal) {
-        nodeColor = Colors.red;
-        nodeSize = 25;
-      } else if (path.contains(node)) {
-        nodeColor = Colors.green[400]!;
+        nodeColor = const Color(0xFF00FF9D); // Neon Green
+        borderColor = Colors.white;
         nodeSize = 22;
+        hasGlow = true;
+      } else if (node == selectedGoal) {
+        nodeColor = const Color(0xFFFF0055); // Neon Pink
+        borderColor = Colors.white;
+        nodeSize = 22;
+        hasGlow = true;
+      } else if (path.contains(node)) {
+        nodeColor = const Color(0xFF7000FF); // Neon Purple
+        borderColor = Colors.white;
+        nodeSize = 20;
+        hasGlow = true;
       } else if (node == currentNode) {
-        nodeColor = Colors.orange;
-        nodeSize = 23;
+        nodeColor = const Color(0xFF00F0FF); // Cyan
+        borderColor = Colors.white;
+        nodeSize = 22;
+        hasGlow = true;
       } else if (explored.contains(node)) {
-        nodeColor = Colors.grey[400]!;
+        nodeColor = Colors.grey.withOpacity(0.3);
+        borderColor = Colors.grey;
       } else if (frontier.contains(node)) {
-        nodeColor = Colors.yellow[700]!;
+        nodeColor = const Color(0xFFFFD600); // Yellow
+        borderColor = Colors.white;
+      }
+
+      // رسم درخشش (Glow)
+      if (hasGlow) {
+        final glowPaint = Paint()
+          ..color = nodeColor.withOpacity(0.6)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(node.position, nodeSize + 5, glowPaint);
       }
 
       // رسم دایره نود
@@ -133,7 +208,7 @@ class GraphPainter extends CustomPainter {
 
       // رسم حاشیه
       final borderPaint = Paint()
-        ..color = Colors.white
+        ..color = borderColor
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke;
 
